@@ -8,11 +8,11 @@ As of this writing, it is not possible to delete a meta value using the WordPres
 
 ## How?
 
-Use `GET`, `POST`, or `DELETE` verbs with a endpoint like this:
+Use `GET`, `POST`, or `DELETE` verbs with an endpoint like this:
 
 `https://example.test/wp-json/wp/v2/{post_type}/{post_id}/meta/{meta_key}`
 
-...or like this for Term meta:
+...or like this for term meta:
 
 `https://example.test/wp-json/wp/v2/{taxonomy}/{term_id}/meta/{meta_key}`
 
