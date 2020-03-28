@@ -12,10 +12,6 @@
  * License URI: http://www.gnu.org/licenses/gpl-2.0.html
  */
 
-/**
- * Does not check if meta keys are registered (Probably shouldn't?)
- * Does not add the meta route to custom post types or custom taxonomy terms (Probably should)
- */
 
 class WP_API_Manipulate_Meta
 {
