@@ -32,7 +32,7 @@ class WP_API_Manipulate_Meta
 	}
 
 	/**
-	 * @param Object A WP_Post_Type or WP_Taxonomy
+	 * @param Object $object A WP_Post_Type or WP_Taxonomy
 	 * @return string The route base name in the REST API
 	 */
 	private function find_rest_base( $object )
