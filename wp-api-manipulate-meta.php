@@ -52,14 +52,14 @@ class WP_API_Manipulate_Meta
 
 	private function get_meta_key( $request )
 	{
-		//$request->get_route() = /wp/v2/posts/57244/meta/test_meta_key
+		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
 		$route_pieces = explode( '/', $request->get_route() );
 		return isset( $route_pieces[6] ) ? $route_pieces[6] : '';
 	}
 
 	private function get_object_id( $request )
 	{
-		//$request->get_route() = /wp/v2/{object}/57244/meta/test_meta_key
+		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
 		$route_pieces = explode( '/', $request->get_route() );
 		return isset( $route_pieces[4] ) ? $route_pieces[4] : 0;
 	}
@@ -182,13 +182,11 @@ class WP_API_Manipulate_Meta
 
 	function update_post_meta( $request )
 	{
-		//TODO check has_param
 		return rest_ensure_response( update_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
 	}
 
 	function update_term_meta( $request )
 	{
-		//TODO check has_param
 		return rest_ensure_response( update_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
 	}
 }
