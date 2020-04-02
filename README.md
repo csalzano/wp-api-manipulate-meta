@@ -32,6 +32,10 @@ Use the `DELETE` verb with an endpoint like this:
 
 `https://example.test/wp-json/wp/v2/{post_type}/{post_id}/meta`
 
+...or like this for term meta:
+
+`https://example.test/wp-json/wp/v2/{taxonomy}/{term_id}/meta`
+
 ...and a JSON body to specify which meta values should be deleted:
 
 ```

@@ -23,5 +23,9 @@ As of this writing, it is not possible to delete a meta value using the WordPres
 
 == Changelog ==
 
+= 1.3.0 =
+* [Added] Adds a route to allow the bulk deletion of term meta keys, similar to the bulk delete feature for posts introduced in 1.1.0.
+* [Fixed] Fixes a bug where a method intended for `sanitize_callback` was provided instead as the `validate_callback`.
+
 = 1.2.0 =
 * [Added] Adds this readme.txt
