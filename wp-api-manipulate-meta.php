@@ -21,6 +21,137 @@ class WP_API_Manipulate_Meta
 		add_action( 'rest_api_init', array( $this, 'add_term_meta_routes' ) );
 	}
 
+	function add_post_meta_routes()
+	{
+		foreach( $this->public_api_post_types() as $post_type )
+		{
+			$rest_base = $this->find_rest_base( $post_type );
+
+			/**
+			 * Create read, write, delete routes that modify one meta key per
+			 * request.
+			 */
+			$route = '/' . $rest_base . '/([0-9]+)/meta/([a-zA-Z0-9\-_]+)';
+
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::READABLE,
+					'callback' => array( $this, 'get_meta' ),
+				)
+			);
+
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::CREATABLE,
+					'callback' => array( $this, 'update_post_meta' ),
+					'args'     => array(
+						'value' => array(
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				)
+			);
+
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::DELETABLE,
+					'callback' => array( $this, 'delete_post_meta' ),
+				)
+			);
+
+			/**
+			 * Create a route that allows one request to delete any number of
+			 * meta values on a post.
+			 */
+			$route = '/' . $rest_base . '/([0-9]+)/meta';
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::DELETABLE,
+					'callback' => array( $this, 'delete_post_meta_bulk' ),
+					'args'     => array(
+						'keys' => array(
+							'validate_callback' => function( $param, $request, $key )
+							{
+								return is_array( $param );
+							},
+						),
+					),
+				)
+			);
+		}
+	}
+
+	function add_term_meta_routes()
+	{
+		foreach( $this->public_api_taxonomies() as $taxonomy )
+		{
+			$rest_base = $this->find_rest_base( $taxonomy );
+			$route = '/' . $rest_base . '/([0-9]+)/meta/([a-zA-Z0-9\-_]+)';
+
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::READABLE,
+					'callback' => array( $this, 'get_meta' ),
+				)
+			);
+
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::CREATABLE,
+					'callback' => array( $this, 'update_term_meta' ),
+					'args'     => array(
+						'value' => array(
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				)
+			);
+
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::DELETABLE,
+					'callback' => array( $this, 'delete_term_meta' ),
+				)
+			);
+
+			/**
+			 * Create a route that allows one request to delete any number of
+			 * meta values on a term.
+			 */
+			$route = '/' . $rest_base . '/([0-9]+)/meta';
+			register_rest_route(
+				'wp/v2',
+				$route,
+				array(
+					'methods'  => WP_REST_Server::DELETABLE,
+					'callback' => array( $this, 'delete_term_meta_bulk' ),
+					'args'     => array(
+						'keys' => array(
+							'validate_callback' => function( $param, $request, $key )
+							{
+								return is_array( $param );
+							},
+						),
+					),
+				)
+			);
+		}
+	}
+
 	/**
 	 * Deletes a single post meta value and returns the API response to the
 	 * client. REST API route callback method.
@@ -122,6 +253,25 @@ class WP_API_Manipulate_Meta
 	/**
 	 * @param WP_REST_Request $request
 	 */
+	function get_meta( $request )
+	{
+		$rest_base = $this->get_rest_base( $request );
+		if( $this->object_is_post( $rest_base ) )
+		{
+			return rest_ensure_response( get_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
+		}
+
+		if( $this->object_is_term( $rest_base ) )
+		{
+			return rest_ensure_response( get_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
+		}
+
+		return rest_ensure_response( 'shit' );
+	}
+
+	/**
+	 * @param WP_REST_Request $request
+	 */
 	private function get_meta_key( $request )
 	{
 		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
@@ -142,170 +292,79 @@ class WP_API_Manipulate_Meta
 	/**
 	 * @param WP_REST_Request $request
 	 */
-	function get_post_meta( $request )
+	private function get_rest_base( $request )
 	{
-		return rest_ensure_response( get_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
+		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
+		$route_pieces = explode( '/', $request->get_route() );
+		return isset( $route_pieces[3] ) ? $route_pieces[3] : '';
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Using the base string, determine whether the object being queried in the REST API is a post.
+	 *
+	 * @param string $rest_base The rest_base attribute of a post type definition, or it's name if a rest_base was not provided.
+	 * @return boolean True if the object belonging to the provided $rest_base is a Post
 	 */
-	function get_term_meta( $request )
+	private function object_is_post( $rest_base )
 	{
-		return rest_ensure_response( get_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
-	}
-
-	function add_post_meta_routes()
-	{
-		foreach( $this->public_api_post_types() as $post_type )
+		if( empty( $rest_base ) )
 		{
-			$rest_base = $this->find_rest_base( $post_type );
-
-			/**
-			 * Create read, write, delete routes that modify one meta key per
-			 * request.
-			 */
-			$route = '/' . $rest_base . '/([0-9]+)/meta/([a-zA-Z0-9\-_]+)';
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::READABLE,
-					'callback' => array( $this, 'get_post_meta' ),
-				)
-			);
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::CREATABLE,
-					'callback' => array( $this, 'update_post_meta' ),
-					'args'     => array(
-						'value' => array(
-							'sanitize_callback' => 'sanitize_text_field',
-						),
-					),
-				)
-			);
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_post_meta' ),
-				)
-			);
-
-			/**
-			 * Create a route that allows one request to delete any number of
-			 * meta values on a post.
-			 */
-			$route = '/' . $rest_base . '/([0-9]+)/meta';
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_post_meta_bulk' ),
-					'args'     => array(
-						'keys' => array(
-							'validate_callback' => function( $param, $request, $key )
-							{
-								return is_array( $param );
-							},
-						),
-					),
-				)
-			);
+			return false;
 		}
-	}
-
-	function add_term_meta_routes()
-	{
-		foreach( $this->public_api_taxonomies() as $taxonomy )
-		{
-			$rest_base = $this->find_rest_base( $taxonomy );
-			$route = '/' . $rest_base . '/([0-9]+)/meta/([a-zA-Z0-9\-_]+)';
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::READABLE,
-					'callback' => array( $this, 'get_term_meta' ),
-				)
-			);
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::CREATABLE,
-					'callback' => array( $this, 'update_term_meta' ),
-					'args'     => array(
-						'value' => array(
-							'sanitize_callback' => 'sanitize_text_field',
-						),
-					),
-				)
-			);
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_term_meta' ),
-				)
-			);
-
-			/**
-			 * Create a route that allows one request to delete any number of
-			 * meta values on a term.
-			 */
-			$route = '/' . $rest_base . '/([0-9]+)/meta';
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_term_meta_bulk' ),
-					'args'     => array(
-						'keys' => array(
-							'validate_callback' => function( $param, $request, $key )
-							{
-								return is_array( $param );
-							},
-						),
-					),
-				)
-			);
-		}
+		return ! empty( $this->public_api_post_types( array( 'rest_base' => $rest_base ) ) )
+			|| ! empty( $this->public_api_post_types( array( 'name' => $rest_base ) ) );
 	}
 
 	/**
+	 * Using the base string, determine whether the object being queried in the REST API is a term.
+	 *
+	 * @param string $rest_base The rest_base attribute of a taxonomy definition, or it's name if a rest_base was not provided.
+	 * @return boolean True if the object belonging to the provided $rest_base is a Term
+	 */
+	private function object_is_term( $rest_base )
+	{
+		if( empty( $rest_base ) )
+		{
+			return false;
+		}
+		return ! empty( $this->public_api_taxonomies( array( 'rest_base' => $rest_base ) ) )
+			|| ! empty( $this->public_api_taxonomies( array( 'name' => $rest_base ) ) );
+	}
+
+	/**
+	 * @param Array $additional_args An associative array of additional arguments to pass into get_post_types()
 	 * @return Array An array of all public and API-exposted post type objects
 	 */
-	private function public_api_post_types()
+	private function public_api_post_types( $additional_args = array() )
 	{
-		return get_post_types( array(
+		if( ! is_array( $additional_args ) )
+		{
+			$additional_args = array();
+		}
+
+		$args = wp_parse_args( $additional_args, array(
 			'public'       => true,
 			'show_in_rest' => true,
-		), 'objects' );
+		) );
+		return get_post_types( $args, 'objects' );
 	}
 
 	/**
+	 * @param Array $additional_args An associative array of additional arguments to pass into get_taxonomies()
 	 * @return Array An array of all public and API-exposed taxonomy objects
 	 */
-	private function public_api_taxonomies()
+	private function public_api_taxonomies( $additional_args = array() )
 	{
-		return get_taxonomies( array(
+		if( ! is_array( $additional_args ) )
+		{
+			$additional_args = array();
+		}
+
+		$args = wp_parse_args( $additional_args, array(
 			'public'       => true,
 			'show_in_rest' => true,
-		), 'objects' );
+		) );
+		return get_taxonomies( $args, 'objects' );
 	}
 
 	/**

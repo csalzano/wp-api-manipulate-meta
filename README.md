@@ -8,7 +8,7 @@ As of this writing, it is not possible to delete a meta value using the WordPres
 
 ## How?
 
-## Read, Write, or Delete a Single Meta Value
+### Read, Write, or Delete a Single Meta Value
 
 Use `GET`, `POST`, or `DELETE` verbs with an endpoint like this:
 
@@ -26,7 +26,7 @@ When writing a value with `POST`, use a JSON body to specify the value:
 }
 ```
 
-## Bulk Delete Meta Values
+### Bulk Delete Meta Values
 
 Use the `DELETE` verb with an endpoint like this:
 
