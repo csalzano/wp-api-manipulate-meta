@@ -81,8 +81,6 @@ class WP_API_Manipulate_Meta
 			$rest_base = $this->find_rest_base( $post_type );
 			$route = '/' . $rest_base . '/([0-9]+)/meta/([a-zA-Z0-9\-_]+)';
 
-			error_log( '$route = ' . $route );
-
 			register_rest_route(
 				'wp/v2',
 				$route,
