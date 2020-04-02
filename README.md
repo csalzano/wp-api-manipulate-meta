@@ -1,6 +1,6 @@
 # Manipulate Meta with the WP API
 
-This is a WordPress plugin. It adds routes to the REST API to read, write, and delete post and term meta values separately from posts.
+This is a WordPress plugin. It adds routes to the REST API to read, write, and delete post and term meta values separately from posts and terms.
 
 ## Why though?
 
