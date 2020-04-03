@@ -24,15 +24,16 @@ class WP_API_Manipulate_Meta_Registrant
 		//Setup a class auto-loader
 		spl_autoload_register( array( $this, 'autoloader' ) );
 
-		add_action( 'rest_api_init', array( $this, 'add_post_meta_routes' ) );
-		add_action( 'rest_api_init', array( $this, 'add_term_meta_routes' ) );
+		add_action( 'rest_api_init', array( $this, 'add_routes' ) );
 	}
 
-	function add_post_meta_routes()
+
+	function add_routes()
 	{
-		foreach( $this->public_api_post_types() as $post_type )
+		$object_types = $this->public_api_post_types() + $this->public_api_taxonomies();
+		foreach( $object_types as $object_type )
 		{
-			$rest_base = $this->find_rest_base( $post_type );
+			$rest_base = $this->find_rest_base( $object_type );
 
 			/**
 			 * Create read, write, delete routes that modify one meta key per
@@ -74,70 +75,7 @@ class WP_API_Manipulate_Meta_Registrant
 
 			/**
 			 * Create a route that allows one request to delete any number of
-			 * meta values on a post.
-			 */
-			$route = '/' . $rest_base . '/([0-9]+)/meta';
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_meta_bulk' ),
-					'args'     => array(
-						'keys' => array(
-							'validate_callback' => function( $param, $request, $key )
-							{
-								return is_array( $param );
-							},
-						),
-					),
-				)
-			);
-		}
-	}
-
-	function add_term_meta_routes()
-	{
-		foreach( $this->public_api_taxonomies() as $taxonomy )
-		{
-			$rest_base = $this->find_rest_base( $taxonomy );
-			$route = '/' . $rest_base . '/([0-9]+)/meta/([a-zA-Z0-9\-_]+)';
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::READABLE,
-					'callback' => array( $this, 'get_meta' ),
-				)
-			);
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::CREATABLE,
-					'callback' => array( $this, 'update_meta' ),
-					'args'     => array(
-						'value' => array(
-							'sanitize_callback' => 'sanitize_text_field',
-						),
-					),
-				)
-			);
-
-			register_rest_route(
-				'wp/v2',
-				$route,
-				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_meta' ),
-				)
-			);
-
-			/**
-			 * Create a route that allows one request to delete any number of
-			 * meta values on a term.
+			 * meta values.
 			 */
 			$route = '/' . $rest_base . '/([0-9]+)/meta';
 			register_rest_route(
