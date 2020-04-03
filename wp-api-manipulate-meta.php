@@ -12,11 +12,18 @@
  * License URI: http://www.gnu.org/licenses/gpl-2.0.html
  */
 
-
-class WP_API_Manipulate_Meta
+class WP_API_Manipulate_Meta_Registrant
 {
 	function hooks()
 	{
+		//Allow translations of strings
+		add_action( 'plugins_loaded', function() {
+			load_plugin_textdomain( 'wp-api-manipulate-meta', false, __DIR__ );
+		} );
+
+		//Setup a class auto-loader
+		spl_autoload_register( array( $this, 'autoloader' ) );
+
 		add_action( 'rest_api_init', array( $this, 'add_post_meta_routes' ) );
 		add_action( 'rest_api_init', array( $this, 'add_term_meta_routes' ) );
 	}
@@ -47,7 +54,7 @@ class WP_API_Manipulate_Meta
 				$route,
 				array(
 					'methods'  => WP_REST_Server::CREATABLE,
-					'callback' => array( $this, 'update_post_meta' ),
+					'callback' => array( $this, 'update_meta' ),
 					'args'     => array(
 						'value' => array(
 							'sanitize_callback' => 'sanitize_text_field',
@@ -61,7 +68,7 @@ class WP_API_Manipulate_Meta
 				$route,
 				array(
 					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_post_meta' ),
+					'callback' => array( $this, 'delete_meta' ),
 				)
 			);
 
@@ -75,7 +82,7 @@ class WP_API_Manipulate_Meta
 				$route,
 				array(
 					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_post_meta_bulk' ),
+					'callback' => array( $this, 'delete_meta_bulk' ),
 					'args'     => array(
 						'keys' => array(
 							'validate_callback' => function( $param, $request, $key )
@@ -110,7 +117,7 @@ class WP_API_Manipulate_Meta
 				$route,
 				array(
 					'methods'  => WP_REST_Server::CREATABLE,
-					'callback' => array( $this, 'update_term_meta' ),
+					'callback' => array( $this, 'update_meta' ),
 					'args'     => array(
 						'value' => array(
 							'sanitize_callback' => 'sanitize_text_field',
@@ -124,7 +131,7 @@ class WP_API_Manipulate_Meta
 				$route,
 				array(
 					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_term_meta' ),
+					'callback' => array( $this, 'delete_meta' ),
 				)
 			);
 
@@ -138,7 +145,7 @@ class WP_API_Manipulate_Meta
 				$route,
 				array(
 					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_term_meta_bulk' ),
+					'callback' => array( $this, 'delete_meta_bulk' ),
 					'args'     => array(
 						'keys' => array(
 							'validate_callback' => function( $param, $request, $key )
@@ -153,34 +160,81 @@ class WP_API_Manipulate_Meta
 	}
 
 	/**
-	 * Deletes a single post meta value and returns the API response to the
-	 * client. REST API route callback method.
+	 * A last-chance class autoloader for spl_autoload_register()
 	 *
-	 * @param WP_REST_Request $request
+	 * Takes a class name Errors and includes a file with the path includes/errors.php
+	 *
+	 * @param string The name of a class that is being instantiated
+	 * @return void
 	 */
-	function delete_post_meta( $request )
+	function autoloader( $class_path )
 	{
-		return rest_ensure_response( delete_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ) ) );
+		$namespace = 'WP_API_Manipulate_Meta';
+		if( $namespace != substr( $class_path, 0, strlen( $namespace ) ) )
+		{
+			return;
+		}
+
+		$class_pieces = explode( '\\', $class_path );
+		array_shift( $class_pieces );
+		$path = '\\includes\\' . strtolower( implode( '\\', $class_pieces ) ) . '.php';
+		$path = untrailingslashit( plugin_dir_path( __FILE__ ) ) . str_replace( '_', '-', str_replace( '\\', DIRECTORY_SEPARATOR, strtolower( $path ) ) );
+
+		file_exists( $path ) && require $path;
 	}
 
 	/**
-	 * Deletes multiple post meta values identified by an array of post meta
-	 * keys in the request body. Returns the API response to the client. REST
-	 * API route callback method.
+	 * Deletes a single meta value and returns the API response to the client.
+	 * REST API route callback method.
 	 *
 	 * @param WP_REST_Request $request
 	 */
-	function delete_post_meta_bulk( $request )
+	function delete_meta( $request )
+	{
+		$rest_base = $this->get_rest_base( $request );
+		if( $this->object_is_post( $rest_base ) )
+		{
+			return rest_ensure_response( delete_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ) ) );
+		}
+
+		if( $this->object_is_term( $rest_base ) )
+		{
+			return rest_ensure_response( delete_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ) ) );
+		}
+
+		return rest_ensure_response(  WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
+	}
+
+	/**
+	 * Deletes multiple meta values identified by an array of meta keys in the
+	 * request body. Returns the API response to the client. REST API route
+	 * callback method.
+	 *
+	 * @param WP_REST_Request $request
+	 */
+	function delete_meta_bulk( $request )
 	{
 		$keys_to_delete = $request->get_param( 'keys' );
 		if( empty( $keys_to_delete ) )
 		{
 			//bad request
-			return rest_ensure_response( new WP_Error(
-				'rest_invalid_keys_array',
-				__( 'The body of the request is missing an array of meta keys to delete in a member called `keys`.' ),
-				array( 'status' => 400 )
-			) );
+			return rest_ensure_response( WP_API_Manipulate_Meta\Errors::invalid_keys_array() );
+		}
+
+		$rest_base = $this->get_rest_base( $request );
+		$object_is_post = false;
+		$object_is_term = false;
+		if( $this->object_is_post( $rest_base ) )
+		{
+			$object_is_post = true;
+		}
+		elseif( $this->object_is_term( $rest_base ) )
+		{
+			$object_is_term = true;
+		}
+		else
+		{
+			return rest_ensure_response(  WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
 		}
 
 		$post_id = $this->get_object_id( $request );
@@ -188,47 +242,16 @@ class WP_API_Manipulate_Meta
 
 		foreach( $keys_to_delete as $key )
 		{
-			$results[] = delete_post_meta( $post_id, $key );
+			if( $object_is_post )
+			{
+				$results[] = delete_post_meta( $post_id, $key );
+			}
+			elseif( $object_is_term )
+			{
+				$results[] = delete_term_meta( $term_id, $key );
+			}
 		}
 		return rest_ensure_response( $results );
-	}
-
-	/**
-	 * Deletes multiple term meta values identified by an array of term meta
-	 * keys in the request body. Returns the API response to the client. REST
-	 * API route callback method.
-	 *
-	 * @param WP_REST_Request $request
-	 */
-	function delete_term_meta_bulk( $request )
-	{
-		$keys_to_delete = $request->get_param( 'keys' );
-		if( empty( $keys_to_delete ) )
-		{
-			//bad request
-			return rest_ensure_response( new WP_Error(
-				'rest_invalid_keys_array',
-				__( 'The body of the request is missing an array of meta keys to delete in a member called `keys`.' ),
-				array( 'status' => 400 )
-			) );
-		}
-
-		$term_id = $this->get_object_id( $request );
-		$results = array();
-
-		foreach( $keys_to_delete as $key )
-		{
-			$results[] = delete_term_meta( $term_id, $key );
-		}
-		return rest_ensure_response( $results );
-	}
-
-	/**
-	 * @param WP_REST_Request $request
-	 */
-	function delete_term_meta( $request )
-	{
-		return rest_ensure_response( delete_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ) ) );
 	}
 
 	/**
@@ -266,11 +289,7 @@ class WP_API_Manipulate_Meta
 			return rest_ensure_response( get_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
 		}
 
-		return rest_ensure_response( new WP_Error(
-			'rest_cannot_determine_object_type',
-			__( 'Could not determine whether `' . $rest_base . '` is a post or a taxonomy. Is the post or taxonomy enabled in the REST API? Does it\'s registration specify a `rest_base`?' ),
-			array( 'status' => 400 )
-		) );
+		return rest_ensure_response( WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
 	}
 
 	/**
@@ -315,6 +334,7 @@ class WP_API_Manipulate_Meta
 		{
 			return false;
 		}
+
 		return ! empty( $this->public_api_post_types( array( 'rest_base' => $rest_base ) ) )
 			|| ! empty( $this->public_api_post_types( array( 'name' => $rest_base ) ) );
 	}
@@ -374,18 +394,22 @@ class WP_API_Manipulate_Meta
 	/**
 	 * @param WP_REST_Request $request
 	 */
-	function update_post_meta( $request )
+	function update_meta( $request )
 	{
-		return rest_ensure_response( update_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
-	}
+		$rest_base = $this->get_rest_base( $request );
+		if( $this->object_is_post( $rest_base ) )
+		{
+			return rest_ensure_response( update_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
+		}
 
-	/**
-	 * @param WP_REST_Request $request
-	 */
-	function update_term_meta( $request )
-	{
-		return rest_ensure_response( update_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
+		if( $this->object_is_term( $rest_base ) )
+		{
+			return rest_ensure_response( update_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
+		}
+
+		return rest_ensure_response( WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
+
 	}
 }
-$manipulate_meta_2934870234723 = new WP_API_Manipulate_Meta();
+$manipulate_meta_2934870234723 = new WP_API_Manipulate_Meta_Registrant();
 $manipulate_meta_2934870234723->hooks();
