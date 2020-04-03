@@ -266,7 +266,11 @@ class WP_API_Manipulate_Meta
 			return rest_ensure_response( get_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
 		}
 
-		return rest_ensure_response( 'shit' );
+		return rest_ensure_response( new WP_Error(
+			'rest_cannot_determine_object_type',
+			__( 'Could not determine whether `' . $rest_base . '` is a post or a taxonomy. Is the post or taxonomy enabled in the REST API? Does it\'s registration specify a `rest_base`?' ),
+			array( 'status' => 400 )
+		) );
 	}
 
 	/**
