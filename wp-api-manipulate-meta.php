@@ -198,11 +198,6 @@ class WP_API_Manipulate_Meta_Registrant
 	private function find_object_capability( $rest_base, $cap_slug )
 	{
 		$object_type = $this->find_object_type( $rest_base );
-		if( ! $object_type )
-		{
-			return '';
-		}
-
 		if( ! empty( $object_type->cap->$cap_slug ) )
 		{
 			return $object_type->cap->$cap_slug;
