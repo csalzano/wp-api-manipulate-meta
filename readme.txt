@@ -23,6 +23,9 @@ As of this writing, it is not possible to delete a meta value using the WordPres
 
 == Changelog ==
 
+= 1.4.2 =
+* [Fixed] Fixes a bug where no `permission_callback` was specified for any REST routes, so any user, including a non-authenticated user, could modify meta data using the routes.
+
 = 1.4.1 =
 * [Fixed] Implements translatable strings in our error messages
 

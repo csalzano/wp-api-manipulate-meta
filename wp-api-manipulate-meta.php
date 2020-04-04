@@ -3,7 +3,7 @@
  * Plugin Name: Manipulate Meta with the WP API
  * Plugin URI: https://github.com/csalzano/wp-api-add-post-parent
  * Description: Adds routes to the REST API to read, write, and delete post and term meta values separately from posts.
- * Version: 1.4.1
+ * Version: 1.4.2
  * Author: Corey Salzano
  * Author URI: https://profiles.wordpress.org/salzano
  * Text Domain: wp-api-manipulate-meta
@@ -54,9 +54,10 @@ class WP_API_Manipulate_Meta_Registrant
 				'wp/v2',
 				$route,
 				array(
-					'methods'  => WP_REST_Server::CREATABLE,
-					'callback' => array( $this, 'update_meta' ),
-					'args'     => array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'update_meta' ),
+					'permission_callback' => array( $this, 'have_create_permission'),
+					'args'                => array(
 						'value' => array(
 							'sanitize_callback' => 'sanitize_text_field',
 						),
@@ -68,8 +69,9 @@ class WP_API_Manipulate_Meta_Registrant
 				'wp/v2',
 				$route,
 				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_meta' ),
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_meta' ),
+					'permission_callback' => array( $this, 'have_delete_permission' ),
 				)
 			);
 
@@ -82,9 +84,10 @@ class WP_API_Manipulate_Meta_Registrant
 				'wp/v2',
 				$route,
 				array(
-					'methods'  => WP_REST_Server::DELETABLE,
-					'callback' => array( $this, 'delete_meta_bulk' ),
-					'args'     => array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_meta_bulk' ),
+					'permission_callback' => array( $this, 'have_delete_permission' ),
+					'args'                => array(
 						'keys' => array(
 							'validate_callback' => function( $param, $request, $key )
 							{
@@ -192,6 +195,54 @@ class WP_API_Manipulate_Meta_Registrant
 		return rest_ensure_response( $results );
 	}
 
+	private function find_object_capability( $rest_base, $cap_slug )
+	{
+		$object_type = $this->find_object_type( $rest_base );
+		if( ! $object_type )
+		{
+			return '';
+		}
+
+		if( ! empty( $object_type->cap->$cap_slug ) )
+		{
+			return $object_type->cap->$cap_slug;
+		}
+
+		return '';
+	}
+
+	/**
+	 * @return WP_Post|WP_Taxonomy|false
+	 */
+	private function find_object_type( $rest_base )
+	{
+		$post_types_by_rest_base = $this->public_api_post_types( array( 'rest_base' => $rest_base ) );
+		if( ! empty( $post_types_by_rest_base ) )
+		{
+			return array_values( $post_types_by_rest_base )[0];
+		}
+
+		$post_types_by_name = $this->public_api_post_types( array( 'name' => $rest_base ) );
+		if( ! empty( $post_types_by_name ) )
+		{
+			return array_values( $post_types_by_name )[0];
+		}
+
+		$taxonomies_by_rest_base = $this->public_api_taxonomies( array( 'rest_base' => $rest_base ) );
+		if( ! empty( $taxonomies_by_rest_base ) )
+		{
+			return array_values( $taxonomies_by_rest_base )[0];
+		}
+
+		$taxonomies_by_name = $this->public_api_taxonomies( array( 'name' => $rest_base ) );
+		if( ! empty( $taxonomies_by_name ) )
+		{
+			return array_values( $taxonomies_by_name )[0];
+		}
+
+		return false;
+	}
+
 	/**
 	 * @param Object $object A WP_Post_Type or WP_Taxonomy
 	 * @return string The route base name in the REST API
@@ -258,6 +309,70 @@ class WP_API_Manipulate_Meta_Registrant
 		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
 		$route_pieces = explode( '/', $request->get_route() );
 		return isset( $route_pieces[3] ) ? $route_pieces[3] : '';
+	}
+
+	/**
+	 * Check if a given request has access to create items
+	 *
+	 * @param WP_REST_Request $request
+	 * @return WP_Error|bool
+	 */
+	function have_create_permission( $request )
+	{
+		$rest_base = $this->get_rest_base( $request );
+		$cap_slug = '';
+		if( $this->object_is_post( $rest_base ) )
+		{
+			$cap_slug = 'edit_post';
+		}
+		elseif( $this->object_is_term( $rest_base ) )
+		{
+			$cap_slug = 'edit_terms';
+		}
+		else
+		{
+			return false;
+		}
+
+		//Translate $cap_slug into this object's capability name
+		$specific_slug = $this->find_object_capability( $rest_base, $cap_slug );
+		if( empty( $specific_slug ) )
+		{
+			return false;
+		}
+		return current_user_can( $specific_slug, $this->get_object_id( $request ) );
+	}
+
+	/**
+	 * Check if a given request has access to delete items
+	 *
+	 * @param WP_REST_Request $request
+	 * @return WP_Error|bool
+	 */
+	function have_delete_permission( $request )
+	{
+		$rest_base = $this->get_rest_base( $request );
+		$cap_slug = '';
+		if( $this->object_is_post( $rest_base ) )
+		{
+			$cap_slug = 'delete_post';
+		}
+		elseif( $this->object_is_term( $rest_base ) )
+		{
+			$cap_slug = 'delete_terms';
+		}
+		else
+		{
+			return false;
+		}
+
+		//Translate $cap_slug into this object's capability name
+		$specific_slug = $this->find_object_capability( $rest_base, $cap_slug );
+		if( empty( $specific_slug ) )
+		{
+			return false;
+		}
+		return current_user_can( $specific_slug, $this->get_object_id( $request ) );
 	}
 
 	/**
@@ -346,7 +461,6 @@ class WP_API_Manipulate_Meta_Registrant
 		}
 
 		return rest_ensure_response( WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
-
 	}
 }
 $manipulate_meta_2934870234723 = new WP_API_Manipulate_Meta_Registrant();
