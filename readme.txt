@@ -3,7 +3,7 @@ Contributors: salzano
 Tags: REST API, WP API, delete meta
 Requires at least: 5.0.0
 Tested up to: 5.4.0
-Stable tag: 1.4.1
+Stable tag: 1.4.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,6 +22,9 @@ As of this writing, it is not possible to delete a meta value using the WordPres
 
 
 == Changelog ==
+
+= 1.4.3 =
+* [Fixed] Fixes a bug that prevented the bulk deletion of term meta values.
 
 = 1.4.2 =
 * [Fixed] Fixes a bug where no `permission_callback` was specified for any REST routes, so any user, including a non-authenticated user, could modify meta data using the routes.

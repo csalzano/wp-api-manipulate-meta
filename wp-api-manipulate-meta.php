@@ -3,7 +3,7 @@
  * Plugin Name: Manipulate Meta with the WP API
  * Plugin URI: https://github.com/csalzano/wp-api-add-post-parent
  * Description: Adds routes to the REST API to read, write, and delete post and term meta values separately from posts.
- * Version: 1.4.2
+ * Version: 1.4.3
  * Author: Corey Salzano
  * Author URI: https://profiles.wordpress.org/salzano
  * Text Domain: wp-api-manipulate-meta
@@ -178,18 +178,18 @@ class WP_API_Manipulate_Meta_Registrant
 			return rest_ensure_response(  WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
 		}
 
-		$post_id = $this->get_object_id( $request );
+		$object_id = $this->get_object_id( $request );
 		$results = array();
 
 		foreach( $keys_to_delete as $key )
 		{
 			if( $object_is_post )
 			{
-				$results[] = delete_post_meta( $post_id, $key );
+				$results[] = delete_post_meta( $object_id, $key );
 			}
 			elseif( $object_is_term )
 			{
-				$results[] = delete_term_meta( $term_id, $key );
+				$results[] = delete_term_meta( $object_id, $key );
 			}
 		}
 		return rest_ensure_response( $results );
