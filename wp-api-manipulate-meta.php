@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Manipulate Meta with the WP API
- * Plugin URI: https://github.com/csalzano/wp-api-add-post-parent
+ * Plugin URI: https://github.com/csalzano/wp-api-manipulate-meta
  * Description: Adds routes to the REST API to read, write, and delete post and term meta values separately from posts.
  * Version: 1.4.3
  * Author: Corey Salzano
