@@ -3,7 +3,7 @@
  * Plugin Name: Manipulate Meta with the WP API
  * Plugin URI: https://github.com/csalzano/wp-api-manipulate-meta
  * Description: Adds routes to the REST API to read, write, and delete post and term meta values separately from posts.
- * Version: 1.4.3
+ * Version: 1.4.4
  * Author: Corey Salzano
  * Author URI: https://profiles.wordpress.org/salzano
  * Text Domain: wp-api-manipulate-meta
@@ -45,8 +45,9 @@ class WP_API_Manipulate_Meta_Registrant
 				'wp/v2',
 				$route,
 				array(
-					'methods'  => WP_REST_Server::READABLE,
-					'callback' => array( $this, 'get_meta' ),
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_meta' ),
+					'permission_callback' => '__return_true',
 				)
 			);
 
