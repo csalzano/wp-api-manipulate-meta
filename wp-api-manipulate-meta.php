@@ -3,36 +3,49 @@
  * Plugin Name: Manipulate Meta with the WP API
  * Plugin URI: https://github.com/csalzano/wp-api-manipulate-meta
  * Description: Adds routes to the REST API to read, write, and delete post and term meta values separately from posts.
- * Version: 1.4.4
+ * Version: 1.4.5
  * Author: Corey Salzano
- * Author URI: https://profiles.wordpress.org/salzano
+ * Author URI: https://breakfastco.xyz
  * Text Domain: wp-api-manipulate-meta
  * Domain Path: /languages
  * License: GPLv2 or later
  * License URI: http://www.gnu.org/licenses/gpl-2.0.html
+ *
+ * @package wp-api-manipulate-meta
  */
 
-class WP_API_Manipulate_Meta_Registrant
-{
-	function hooks()
-	{
-		//Allow translations of strings
-		add_action( 'plugins_loaded', function() {
-			load_plugin_textdomain( 'wp-api-manipulate-meta', false, __DIR__ );
-		} );
+defined( 'ABSPATH' ) || exit;
 
-		//Setup a class auto-loader
-		spl_autoload_register( array( $this, 'autoloader' ) );
+/**
+ * WP_API_Manipulate_Meta_Registrant
+ */
+class WP_API_Manipulate_Meta_Registrant {
+
+	/**
+	 * hooks
+	 *
+	 * @return void
+	 */
+	public function hooks() {
+		// Allow translations of strings.
+		add_action(
+			'plugins_loaded',
+			function() {
+				load_plugin_textdomain( 'wp-api-manipulate-meta', false, __DIR__ );
+			}
+		);
 
 		add_action( 'rest_api_init', array( $this, 'add_routes' ) );
 	}
 
-
-	function add_routes()
-	{
+	/**
+	 * add_routes
+	 *
+	 * @return void
+	 */
+	public function add_routes() {
 		$object_types = $this->public_api_post_types() + $this->public_api_taxonomies();
-		foreach( $object_types as $object_type )
-		{
+		foreach ( $object_types as $object_type ) {
 			$rest_base = $this->find_rest_base( $object_type );
 
 			/**
@@ -57,7 +70,7 @@ class WP_API_Manipulate_Meta_Registrant
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'update_meta' ),
-					'permission_callback' => array( $this, 'have_create_permission'),
+					'permission_callback' => array( $this, 'have_create_permission' ),
 					'args'                => array(
 						'value' => array(
 							'sanitize_callback' => 'sanitize_text_field',
@@ -90,8 +103,7 @@ class WP_API_Manipulate_Meta_Registrant
 					'permission_callback' => array( $this, 'have_delete_permission' ),
 					'args'                => array(
 						'keys' => array(
-							'validate_callback' => function( $param, $request, $key )
-							{
+							'validate_callback' => function( $param, $request, $key ) {
 								return is_array( $param );
 							},
 						),
@@ -102,27 +114,35 @@ class WP_API_Manipulate_Meta_Registrant
 	}
 
 	/**
-	 * A last-chance class autoloader for spl_autoload_register()
+	 * create_error_cannot_determine_object_type
 	 *
-	 * Takes a class name Errors and includes a file with the path includes/errors.php
-	 *
-	 * @param string The name of a class that is being instantiated
-	 * @return void
+	 * @param  mixed $rest_base
+	 * @return WP_Error
 	 */
-	function autoloader( $class_path )
-	{
-		$namespace = 'WP_API_Manipulate_Meta';
-		if( $namespace != substr( $class_path, 0, strlen( $namespace ) ) )
-		{
-			return;
-		}
+	public function create_error_cannot_determine_object_type( $rest_base ) {
+		$message = sprintf(
+			/* translators: 1. A post type or taxonomy slug. */
+			__( 'Could not determine whether `%s` is a post or a taxonomy. Is the post or taxonomy enabled in the REST API? Does it\'s registration specify a `rest_base`?', 'wp-api-manipulate-meta' ),
+			$rest_base,
+		);
+		return new \WP_Error(
+			'rest_cannot_determine_object_type',
+			$message,
+			array( 'status' => 400 )
+		);
+	}
 
-		$class_pieces = explode( '\\', $class_path );
-		array_shift( $class_pieces );
-		$path = '\\includes\\' . strtolower( implode( '\\', $class_pieces ) ) . '.php';
-		$path = untrailingslashit( plugin_dir_path( __FILE__ ) ) . str_replace( '_', '-', str_replace( '\\', DIRECTORY_SEPARATOR, strtolower( $path ) ) );
-
-		file_exists( $path ) && require $path;
+	/**
+	 * create_error_invalid_keys_array
+	 *
+	 * @return WP_Error
+	 */
+	public function create_error_invalid_keys_array() {
+		return new \WP_Error(
+			'rest_invalid_keys_array',
+			__( 'The body of the request is missing an array of meta keys to delete called `keys`.', 'wp-api-manipulate-meta' ),
+			array( 'status' => 400 )
+		);
 	}
 
 	/**
@@ -130,21 +150,19 @@ class WP_API_Manipulate_Meta_Registrant
 	 * REST API route callback method.
 	 *
 	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response|WP_Error
 	 */
-	function delete_meta( $request )
-	{
+	public function delete_meta( $request ) {
 		$rest_base = $this->get_rest_base( $request );
-		if( $this->object_is_post( $rest_base ) )
-		{
+		if ( $this->object_is_post( $rest_base ) ) {
 			return rest_ensure_response( delete_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ) ) );
 		}
 
-		if( $this->object_is_term( $rest_base ) )
-		{
+		if ( $this->object_is_term( $rest_base ) ) {
 			return rest_ensure_response( delete_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ) ) );
 		}
 
-		return rest_ensure_response(  WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
+		return rest_ensure_response( $this->create_error_cannot_determine_object_type( $rest_base ) );
 	}
 
 	/**
@@ -153,54 +171,49 @@ class WP_API_Manipulate_Meta_Registrant
 	 * callback method.
 	 *
 	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response|WP_Error
 	 */
-	function delete_meta_bulk( $request )
-	{
+	public function delete_meta_bulk( $request ) {
 		$keys_to_delete = $request->get_param( 'keys' );
-		if( empty( $keys_to_delete ) )
-		{
-			//bad request
-			return rest_ensure_response( WP_API_Manipulate_Meta\Errors::invalid_keys_array() );
+		if ( empty( $keys_to_delete ) ) {
+			// bad request.
+			return rest_ensure_response( $this->create_error_invalid_keys_array() );
 		}
 
-		$rest_base = $this->get_rest_base( $request );
+		$rest_base      = $this->get_rest_base( $request );
 		$object_is_post = false;
 		$object_is_term = false;
-		if( $this->object_is_post( $rest_base ) )
-		{
+		if ( $this->object_is_post( $rest_base ) ) {
 			$object_is_post = true;
-		}
-		elseif( $this->object_is_term( $rest_base ) )
-		{
+		} elseif ( $this->object_is_term( $rest_base ) ) {
 			$object_is_term = true;
-		}
-		else
-		{
-			return rest_ensure_response(  WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
+		} else {
+			return rest_ensure_response( $this->create_error_cannot_determine_object_type( $rest_base ) );
 		}
 
 		$object_id = $this->get_object_id( $request );
-		$results = array();
+		$results   = array();
 
-		foreach( $keys_to_delete as $key )
-		{
-			if( $object_is_post )
-			{
+		foreach ( $keys_to_delete as $key ) {
+			if ( $object_is_post ) {
 				$results[] = delete_post_meta( $object_id, $key );
-			}
-			elseif( $object_is_term )
-			{
+			} elseif ( $object_is_term ) {
 				$results[] = delete_term_meta( $object_id, $key );
 			}
 		}
 		return rest_ensure_response( $results );
 	}
 
-	private function find_object_capability( $rest_base, $cap_slug )
-	{
+	/**
+	 * find_object_capability
+	 *
+	 * @param  mixed $rest_base
+	 * @param  mixed $cap_slug
+	 * @return string
+	 */
+	private function find_object_capability( $rest_base, $cap_slug ) {
 		$object_type = $this->find_object_type( $rest_base );
-		if( ! empty( $object_type->cap->$cap_slug ) )
-		{
+		if ( ! empty( $object_type->cap->$cap_slug ) ) {
 			return $object_type->cap->$cap_slug;
 		}
 
@@ -210,29 +223,24 @@ class WP_API_Manipulate_Meta_Registrant
 	/**
 	 * @return WP_Post|WP_Taxonomy|false
 	 */
-	private function find_object_type( $rest_base )
-	{
+	private function find_object_type( $rest_base ) {
 		$post_types_by_rest_base = $this->public_api_post_types( array( 'rest_base' => $rest_base ) );
-		if( ! empty( $post_types_by_rest_base ) )
-		{
+		if ( ! empty( $post_types_by_rest_base ) ) {
 			return array_values( $post_types_by_rest_base )[0];
 		}
 
 		$post_types_by_name = $this->public_api_post_types( array( 'name' => $rest_base ) );
-		if( ! empty( $post_types_by_name ) )
-		{
+		if ( ! empty( $post_types_by_name ) ) {
 			return array_values( $post_types_by_name )[0];
 		}
 
 		$taxonomies_by_rest_base = $this->public_api_taxonomies( array( 'rest_base' => $rest_base ) );
-		if( ! empty( $taxonomies_by_rest_base ) )
-		{
+		if ( ! empty( $taxonomies_by_rest_base ) ) {
 			return array_values( $taxonomies_by_rest_base )[0];
 		}
 
 		$taxonomies_by_name = $this->public_api_taxonomies( array( 'name' => $rest_base ) );
-		if( ! empty( $taxonomies_by_name ) )
-		{
+		if ( ! empty( $taxonomies_by_name ) ) {
 			return array_values( $taxonomies_by_name )[0];
 		}
 
@@ -240,18 +248,15 @@ class WP_API_Manipulate_Meta_Registrant
 	}
 
 	/**
-	 * @param Object $object A WP_Post_Type or WP_Taxonomy
-	 * @return string The route base name in the REST API
+	 * @param Object $object A WP_Post_Type or WP_Taxonomy.
+	 * @return string The route base name in the REST API.
 	 */
-	private function find_rest_base( $object )
-	{
-		if( ! empty( $object->rest_base ) )
-		{
+	private function find_rest_base( $object ) {
+		if ( ! empty( $object->rest_base ) ) {
 			return $object->rest_base;
 		}
 
-		if( ! empty( $object->name ) )
-		{
+		if ( ! empty( $object->name ) ) {
 			return $object->name;
 		}
 
@@ -260,29 +265,26 @@ class WP_API_Manipulate_Meta_Registrant
 
 	/**
 	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response|WP_Error
 	 */
-	function get_meta( $request )
-	{
+	public function get_meta( $request ) {
 		$rest_base = $this->get_rest_base( $request );
-		if( $this->object_is_post( $rest_base ) )
-		{
+		if ( $this->object_is_post( $rest_base ) ) {
 			return rest_ensure_response( get_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
 		}
 
-		if( $this->object_is_term( $rest_base ) )
-		{
+		if ( $this->object_is_term( $rest_base ) ) {
 			return rest_ensure_response( get_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), true ) );
 		}
 
-		return rest_ensure_response( WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
+		return rest_ensure_response( $this->create_error_cannot_determine_object_type( $rest_base ) );
 	}
 
 	/**
 	 * @param WP_REST_Request $request
 	 */
-	private function get_meta_key( $request )
-	{
-		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
+	private function get_meta_key( $request ) {
+		// /wp/v2/{object_type}/{object_id}/meta/{meta_key}
 		$route_pieces = explode( '/', $request->get_route() );
 		return isset( $route_pieces[6] ) ? $route_pieces[6] : '';
 	}
@@ -290,9 +292,8 @@ class WP_API_Manipulate_Meta_Registrant
 	/**
 	 * @param WP_REST_Request $request
 	 */
-	private function get_object_id( $request )
-	{
-		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
+	private function get_object_id( $request ) {
+		// /wp/v2/{object_type}/{object_id}/meta/{meta_key}
 		$route_pieces = explode( '/', $request->get_route() );
 		return isset( $route_pieces[4] ) ? $route_pieces[4] : 0;
 	}
@@ -300,9 +301,8 @@ class WP_API_Manipulate_Meta_Registrant
 	/**
 	 * @param WP_REST_Request $request
 	 */
-	private function get_rest_base( $request )
-	{
-		//$request->get_route() = /wp/v2/{object_type}/{object_id}/meta/{meta_key}
+	private function get_rest_base( $request ) {
+		// /wp/v2/{object_type}/{object_id}/meta/{meta_key}
 		$route_pieces = explode( '/', $request->get_route() );
 		return isset( $route_pieces[3] ) ? $route_pieces[3] : '';
 	}
@@ -313,27 +313,20 @@ class WP_API_Manipulate_Meta_Registrant
 	 * @param WP_REST_Request $request
 	 * @return WP_Error|bool
 	 */
-	function have_create_permission( $request )
-	{
+	protected function have_create_permission( $request ) {
 		$rest_base = $this->get_rest_base( $request );
-		$cap_slug = '';
-		if( $this->object_is_post( $rest_base ) )
-		{
+		$cap_slug  = '';
+		if ( $this->object_is_post( $rest_base ) ) {
 			$cap_slug = 'edit_post';
-		}
-		elseif( $this->object_is_term( $rest_base ) )
-		{
+		} elseif ( $this->object_is_term( $rest_base ) ) {
 			$cap_slug = 'edit_terms';
-		}
-		else
-		{
+		} else {
 			return false;
 		}
 
-		//Translate $cap_slug into this object's capability name
+		// Translate $cap_slug into this object's capability name.
 		$specific_slug = $this->find_object_capability( $rest_base, $cap_slug );
-		if( empty( $specific_slug ) )
-		{
+		if ( empty( $specific_slug ) ) {
 			return false;
 		}
 		return current_user_can( $specific_slug, $this->get_object_id( $request ) );
@@ -345,27 +338,20 @@ class WP_API_Manipulate_Meta_Registrant
 	 * @param WP_REST_Request $request
 	 * @return WP_Error|bool
 	 */
-	function have_delete_permission( $request )
-	{
+	protected function have_delete_permission( $request ) {
 		$rest_base = $this->get_rest_base( $request );
-		$cap_slug = '';
-		if( $this->object_is_post( $rest_base ) )
-		{
+		$cap_slug  = '';
+		if ( $this->object_is_post( $rest_base ) ) {
 			$cap_slug = 'delete_post';
-		}
-		elseif( $this->object_is_term( $rest_base ) )
-		{
+		} elseif ( $this->object_is_term( $rest_base ) ) {
 			$cap_slug = 'delete_terms';
-		}
-		else
-		{
+		} else {
 			return false;
 		}
 
-		//Translate $cap_slug into this object's capability name
+		// Translate $cap_slug into this object's capability name.
 		$specific_slug = $this->find_object_capability( $rest_base, $cap_slug );
-		if( empty( $specific_slug ) )
-		{
+		if ( empty( $specific_slug ) ) {
 			return false;
 		}
 		return current_user_can( $specific_slug, $this->get_object_id( $request ) );
@@ -377,10 +363,8 @@ class WP_API_Manipulate_Meta_Registrant
 	 * @param string $rest_base The rest_base attribute of a post type definition, or it's name if a rest_base was not provided.
 	 * @return boolean True if the object belonging to the provided $rest_base is a Post
 	 */
-	private function object_is_post( $rest_base )
-	{
-		if( empty( $rest_base ) )
-		{
+	private function object_is_post( $rest_base ) {
+		if ( empty( $rest_base ) ) {
 			return false;
 		}
 
@@ -394,10 +378,8 @@ class WP_API_Manipulate_Meta_Registrant
 	 * @param string $rest_base The rest_base attribute of a taxonomy definition, or it's name if a rest_base was not provided.
 	 * @return boolean True if the object belonging to the provided $rest_base is a Term
 	 */
-	private function object_is_term( $rest_base )
-	{
-		if( empty( $rest_base ) )
-		{
+	private function object_is_term( $rest_base ) {
+		if ( empty( $rest_base ) ) {
 			return false;
 		}
 		return ! empty( $this->public_api_taxonomies( array( 'rest_base' => $rest_base ) ) )
@@ -405,58 +387,58 @@ class WP_API_Manipulate_Meta_Registrant
 	}
 
 	/**
-	 * @param Array $additional_args An associative array of additional arguments to pass into get_post_types()
-	 * @return Array An array of all public and API-exposted post type objects
+	 * @param Array $additional_args An associative array of additional arguments to pass into get_post_types().
+	 * @return Array An array of all public and API-exposted post type objects.
 	 */
-	private function public_api_post_types( $additional_args = array() )
-	{
-		if( ! is_array( $additional_args ) )
-		{
+	private function public_api_post_types( $additional_args = array() ) {
+		if ( ! is_array( $additional_args ) ) {
 			$additional_args = array();
 		}
 
-		$args = wp_parse_args( $additional_args, array(
-			'public'       => true,
-			'show_in_rest' => true,
-		) );
+		$args = wp_parse_args(
+			$additional_args,
+			array(
+				'public'       => true,
+				'show_in_rest' => true,
+			)
+		);
 		return get_post_types( $args, 'objects' );
 	}
 
 	/**
-	 * @param Array $additional_args An associative array of additional arguments to pass into get_taxonomies()
-	 * @return Array An array of all public and API-exposed taxonomy objects
+	 * @param Array $additional_args An associative array of additional arguments to pass into get_taxonomies().
+	 * @return Array An array of all public and API-exposed taxonomy objects.
 	 */
-	private function public_api_taxonomies( $additional_args = array() )
-	{
-		if( ! is_array( $additional_args ) )
-		{
+	private function public_api_taxonomies( $additional_args = array() ) {
+		if ( ! is_array( $additional_args ) ) {
 			$additional_args = array();
 		}
 
-		$args = wp_parse_args( $additional_args, array(
-			'public'       => true,
-			'show_in_rest' => true,
-		) );
+		$args = wp_parse_args(
+			$additional_args,
+			array(
+				'public'       => true,
+				'show_in_rest' => true,
+			)
+		);
 		return get_taxonomies( $args, 'objects' );
 	}
 
 	/**
 	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response|WP_Error
 	 */
-	function update_meta( $request )
-	{
+	public function update_meta( $request ) {
 		$rest_base = $this->get_rest_base( $request );
-		if( $this->object_is_post( $rest_base ) )
-		{
+		if ( $this->object_is_post( $rest_base ) ) {
 			return rest_ensure_response( update_post_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
 		}
 
-		if( $this->object_is_term( $rest_base ) )
-		{
+		if ( $this->object_is_term( $rest_base ) ) {
 			return rest_ensure_response( update_term_meta( $this->get_object_id( $request ), $this->get_meta_key( $request ), $request->get_param( 'value' ) ) );
 		}
 
-		return rest_ensure_response( WP_API_Manipulate_Meta\Errors::cannot_determine_object_type( $rest_base ) );
+		return rest_ensure_response( $this->create_error_cannot_determine_object_type( $rest_base ) );
 	}
 }
 $manipulate_meta_2934870234723 = new WP_API_Manipulate_Meta_Registrant();
